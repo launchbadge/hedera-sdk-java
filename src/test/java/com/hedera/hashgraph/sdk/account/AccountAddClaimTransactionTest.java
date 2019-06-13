@@ -2,12 +2,15 @@ package com.hedera.hashgraph.sdk.account;
 
 import com.hedera.hashgraph.sdk.TransactionId;
 import com.hedera.hashgraph.sdk.crypto.ed25519.Ed25519PrivateKey;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class AccountAddClaimTransactionTest {
     private static final Ed25519PrivateKey key = Ed25519PrivateKey.fromString("302e020100300506032b6570042204203b054fade7a2b0869c6bd4a63b7017cbae7855d12acc357bea718e2c3e805962");
@@ -16,7 +19,7 @@ class AccountAddClaimTransactionTest {
 
     private static final byte[] hash = {1, 2, 2, 3, 3, 3};
 
-    private final AccountAddClaimTransaction txn = new AccountAddClaimTransaction()
+    private final AccountAddClaimTransaction txn = new AccountAddClaimTransaction(null)
         .setNodeAccountId(new AccountId(3))
         .setTransactionId(new TransactionId(new AccountId(1234), Instant.parse("2019-04-08T07:04:00Z")))
         .setAccountId(account)
@@ -34,7 +37,7 @@ class AccountAddClaimTransactionTest {
     void incorrectTransaction() {
         assertThrows(
             IllegalStateException.class,
-            () -> new AccountAddClaimTransaction().build(),
+            () -> new AccountAddClaimTransaction(null).build(),
             "transaction builder failed validation:" +
                 ".setTransactionId() required" +
                 ".setNodeAccountId() required" +
