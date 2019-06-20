@@ -10,6 +10,10 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Objects;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import java.util.stream.LongStream;
+import java.util.stream.Stream;
 
 import javax.annotation.Nonnegative;
 import javax.annotation.Nullable;
@@ -55,11 +59,32 @@ public final class CallParams<Kind> {
         return this;
     }
 
-    public CallParams<Kind> add(byte[] param) {
-        var bytes = ByteString.copyFrom(param);
+    /**
+     * Add a parameter of type {@code string[]}.
+     */
+    public CallParams<Kind> addStringArray(String[] strings) {
+        final var byteStrings = Arrays.stream(strings)
+            .map(s -> {
+                final var strBytes = ByteString.copyFromUtf8(s);
+                return int256(strBytes.size(), 32).concat(strBytes);
+            })
+            .collect(Collectors.toList());
 
-        funcSelector.addParamType("bytes");
-        args.add(new Argument(param.length, bytes));
+        final var offsets = new ArrayList<ByteString>(strings.length);
+
+        // points to start of dynamic segment
+        long currOffset = strings.length * 32;
+
+        for (final var str : byteStrings) {
+            offsets.add(int256(currOffset, 64));
+            currOffset += str.size();
+        }
+
+        final var argBytes = ByteString.copyFrom(
+            Stream.concat(offsets.stream(), byteStrings.stream())::iterator);
+
+        funcSelector.addParamType("string[]");
+        args.add(new Argument(argBytes.size(), argBytes));
 
         return this;
     }
@@ -68,6 +93,42 @@ public final class CallParams<Kind> {
         funcSelector.addParamType("bool");
         // boolean encodes to `uint8` of values [0, 1]
         args.add(new Argument(int256(bool ? 1 : 0, 8)));
+        return this;
+    }
+
+    public CallParams<Kind> addBytes(byte[] param) {
+        var bytes = ByteString.copyFrom(param);
+
+        funcSelector.addParamType("bytes");
+        args.add(new Argument(param.length, bytes));
+
+        return this;
+    }
+
+    /**
+     * Add a fixed-width {@code bytesN} param, explicitly specifying the width.
+     *
+     * @param bytes the bytes which must have a length less than or equal to {@code width}
+     * @param width the nominal byte width of the parameter which must be in the closed range
+     *              {@code [1, 32]}
+     * @return {@code this} for fluent usage
+     * @throws IllegalArgumentException if either argument described previously is out of range.
+     */
+    public CallParams<Kind> addBytes(byte[] bytes, int width) {
+        if (width < 1 || width > 32) {
+            throw new IllegalArgumentException(
+                "expected width param to be > 0 and <= 32; received: " + width);
+        }
+
+        if (bytes.length > width) {
+            throw new IllegalArgumentException(
+                "bytes.length (" + bytes.length + ") > width (" + width + ")");
+        }
+
+        funcSelector.addParamType("bytes" + width);
+        // bytesN is padded with trailing zeroes to a width of 32
+        args.add(new Argument(rightPad32(ByteString.copyFrom(bytes))));
+
         return this;
     }
 
@@ -115,6 +176,67 @@ public final class CallParams<Kind> {
 
         funcSelector.addParamType("int" + width);
         args.add(new Argument(leftPad32(bytes, bigInt.signum() < 0)));
+
+        return this;
+    }
+
+    /**
+     * Add a dynamic-sized array of signed integers as {@code intN[]}.
+     *
+     * @param ints     the integer array to encode
+     * @param bitWidth the nominal bit width for encoding the integer type in the function selector,
+     *                 e.g. {@code bitWidth = 128} produces a param type of {@code int128[]};
+     *                 must be a multiple of 8 and between 8 and 256.
+     * @return {@code this} for fluent usage
+     * @throws IllegalArgumentException if {@code bitWidth} is not in a valid range (see above).
+     */
+    public CallParams<Kind> addIntArray(int[] ints, int bitWidth) {
+        return addIntArray(Arrays.stream(ints), bitWidth);
+    }
+
+    /**
+     * Add a dynamic-sized array of signed integers as {@code intN[]}.
+     *
+     * @param ints     the integer array to encode
+     * @param bitWidth the nominal bit width for encoding the integer type in the function selector,
+     *                 e.g. {@code bitWidth = 128} produces a param type of {@code int128[]};
+     *                 must be a multiple of 8 and between 8 and 256.
+     * @return {@code this} for fluent usage
+     */
+    public CallParams<Kind> addIntArray(long[] ints, int bitWidth) {
+        return addIntArray(Arrays.stream(ints), bitWidth);
+    }
+
+    /**
+     * Add a dynamic-sized array of signed integers as {@code intN[]}.
+     *
+     * @param ints     the integer array to encode
+     * @param bitWidth the nominal bit width for encoding the integer type in the function selector,
+     *                 e.g. {@code bitWidth = 128} produces a param type of {@code int128[]};
+     *                 must be a multiple of 8 and between 8 and 256.
+     * @return {@code this} for fluent usage
+     */
+    public CallParams<Kind> addIntArray(IntStream ints, int bitWidth) {
+        return addIntArray(ints.asLongStream(), bitWidth);
+    }
+
+    /**
+     * Add a dynamic-sized array of signed integers as {@code intN[]}.
+     *
+     * @param ints     the integer array to encode
+     * @param bitWidth the nominal bit width for encoding the integer type in the function selector,
+     *                 e.g. {@code bitWidth = 128} produces a param type of {@code int128[]};
+     *                 must be a multiple of 8 and between 8 and 256.
+     * @return {@code this} for fluent usage
+     */
+    public CallParams<Kind> addIntArray(LongStream ints, int bitWidth) {
+        checkIntWidth(bitWidth);
+
+        final var bytes = ByteString.copyFrom(ints.mapToObj(i -> int256(i, bitWidth))::iterator);
+        final var length = bytes.size() / 32;
+
+        funcSelector.addParamType("int" + bitWidth + "[]");
+        args.add(new Argument(length, bytes));
 
         return this;
     }
