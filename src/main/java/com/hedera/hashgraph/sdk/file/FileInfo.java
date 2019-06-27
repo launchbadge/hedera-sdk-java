@@ -40,10 +40,12 @@ public final class FileInfo {
     }
 
     public List<Key> getKeys() {
+        //noinspection Convert2MethodRef
         return inner.getKeys()
             .getKeysList()
             .stream()
-            .map(Key::fromProtoKey)
+            // current dev version of D8 does not support static interface method references
+            .map(k -> Key.fromProtoKey(k))
             .collect(Collectors.toList());
     }
 }

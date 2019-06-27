@@ -3,6 +3,7 @@ package com.hedera.hashgraph.sdk.account;
 import com.hedera.hashgraph.sdk.Entity;
 import com.hedera.hashgraph.sdk.crypto.Key;
 import com.hedera.hashgraph.sdk.proto.AccountID;
+
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -25,10 +26,12 @@ public final class Claim implements Entity {
     }
 
     public List<Key> getKeys() {
+        //noinspection Convert2MethodRef
         return this.inner.getKeys()
             .getKeysList()
             .stream()
-            .map(Key::fromProtoKey)
+            // current dev version of D8 does not support static interface method references
+            .map(k -> Key.fromProtoKey(k))
             .collect(Collectors.toList());
     }
 }
